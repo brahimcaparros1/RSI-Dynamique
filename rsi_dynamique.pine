@@ -1,0 +1,385 @@
+//@version=6
+indicator("RSI Dynamique avec Zones Volatiles", "RSI-DYN", overlay=false)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PARAMÈTRES UTILISATEUR / USER INPUTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Groupe RSI Principal / Main RSI Group
+g_rsi = "RSI Principal"
+rsi_length = input.int(14, "Période RSI", minval=1, maxval=200, group=g_rsi, tooltip="Période de calcul du RSI (défaut: 14)")
+rsi_source = input.source(close, "Source RSI", group=g_rsi, tooltip="Source de données pour le calcul RSI")
+enable_smoothing = input.bool(true, "Activer Lissage EMA", group=g_rsi, tooltip="Lisse le RSI avec une EMA 3 périodes")
+smoothing_length = input.int(3, "Période Lissage", minval=1, maxval=10, group=g_rsi, tooltip="Période EMA pour lisser le RSI")
+
+// Groupe Zones Dynamiques / Dynamic Zones Group
+g_zones = "Zones Dynamiques"
+atr_length = input.int(20, "Période ATR", minval=1, maxval=100, group=g_zones, tooltip="Période ATR pour calculer la volatilité")
+volatility_factor = input.float(0.5, "Facteur Volatilité", minval=0.1, maxval=2.0, step=0.1, group=g_zones, tooltip="Multiplicateur pour ajuster les zones selon la volatilité")
+base_overbought = input.float(70.0, "Surachat Base", minval=50, maxval=90, group=g_zones, tooltip="Niveau de base pour la zone de surachat")
+base_oversold = input.float(30.0, "Survente Base", minval=10, maxval=50, group=g_zones, tooltip="Niveau de base pour la zone de survente")
+
+// Groupe Multi-Timeframe / Multi-Timeframe Group
+g_mtf = "Multi-Timeframe"
+enable_mtf = input.bool(false, "Activer Multi-TF", group=g_mtf, tooltip="Active l'analyse multi-timeframe")
+higher_tf = input.timeframe("60", "Timeframe Supérieur", group=g_mtf, tooltip="Timeframe pour analyse supérieure")
+
+// Groupe Signaux / Signals Group
+g_signals = "Signaux et Alertes"
+enable_signals = input.bool(true, "Activer Signaux", group=g_signals, tooltip="Active la génération de signaux")
+enable_divergence = input.bool(true, "Détection Divergences", group=g_signals, tooltip="Active la détection de divergences")
+signal_confirmation = input.int(2, "Confirmation Signal", minval=1, maxval=5, group=g_signals, tooltip="Nombre de barres pour confirmer un signal")
+
+// Groupe Affichage / Display Group
+g_display = "Affichage"
+show_dashboard = input.bool(true, "Tableau de Bord", group=g_display, tooltip="Affiche les statistiques en temps réel")
+show_histogram = input.bool(true, "Histogramme Momentum", group=g_display, tooltip="Affiche l'histogramme de momentum")
+dashboard_position = input.string("top_right", "Position Tableau", options=["top_left", "top_right", "bottom_left", "bottom_right"], group=g_display)
+
+// Groupe Backtest / Backtest Group
+g_backtest = "Backtest Intégré"
+enable_backtest = input.bool(false, "Activer Backtest", group=g_backtest, tooltip="Active le backtest intégré")
+backtest_start = input.time(timestamp("2023-01-01 00:00"), "Date Début", group=g_backtest)
+backtest_end = input.time(timestamp("2024-12-31 23:59"), "Date Fin", group=g_backtest)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FONCTIONS UTILITAIRES / UTILITY FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Fonction de validation des paramètres / Parameter validation function
+validate_params() =>
+    var bool params_valid = true
+    if rsi_length < 1 or rsi_length > 200
+        params_valid := false
+        runtime.error("Erreur: Période RSI doit être entre 1 et 200")
+    if atr_length < 1 or atr_length > 100
+        params_valid := false
+        runtime.error("Erreur: Période ATR doit être entre 1 et 100")
+    if volatility_factor < 0.1 or volatility_factor > 2.0
+        params_valid := false
+        runtime.error("Erreur: Facteur volatilité doit être entre 0.1 et 2.0")
+    params_valid
+
+// Fonction de normalisation ATR / ATR normalization function
+normalize_atr(atr_value, lookback_period = 100) =>
+    atr_highest = ta.highest(atr_value, lookback_period)
+    atr_lowest = ta.lowest(atr_value, lookback_period)
+    atr_range = atr_highest - atr_lowest
+    atr_range > 0 ? (atr_value - atr_lowest) / atr_range * 100 : 0
+
+// Fonction de calcul RSI personnalisée / Custom RSI calculation function
+calculate_rsi(src, length) =>
+    delta = ta.change(src)
+    gain = delta > 0 ? delta : 0
+    loss = delta < 0 ? -delta : 0
+    avg_gain = ta.rma(gain, length)
+    avg_loss = ta.rma(loss, length)
+    rs = avg_loss != 0 ? avg_gain / avg_loss : 0
+    rsi = 100 - (100 / (1 + rs))
+    rsi
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CALCULS PRINCIPAUX / MAIN CALCULATIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Validation des paramètres / Parameter validation
+params_ok = validate_params()
+
+// Calcul RSI de base / Base RSI calculation
+rsi_raw = calculate_rsi(rsi_source, rsi_length)
+
+// Lissage RSI avec EMA / RSI smoothing with EMA
+rsi_smoothed = enable_smoothing ? ta.ema(rsi_raw, smoothing_length) : rsi_raw
+rsi_final = rsi_smoothed
+
+// Calcul ATR et normalisation / ATR calculation and normalization
+atr_raw = ta.atr(atr_length)
+atr_normalized = normalize_atr(atr_raw)
+
+// Calcul des zones dynamiques / Dynamic zones calculation
+volatility_adjustment = atr_normalized * volatility_factor * 0.2
+dynamic_overbought = base_overbought + volatility_adjustment
+dynamic_oversold = base_oversold - volatility_adjustment
+
+// Limitation des zones / Zone boundaries
+dynamic_overbought := math.min(dynamic_overbought, 95)
+dynamic_oversold := math.max(dynamic_oversold, 5)
+
+// Multi-timeframe RSI / Multi-timeframe RSI
+mtf_rsi = enable_mtf ? request.security(syminfo.tickerid, higher_tf, rsi_final) : na
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DÉTECTION DE DIVERGENCES / DIVERGENCE DETECTION
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Variables pour divergences / Divergence variables
+var float last_high_price = na
+var float last_low_price = na
+var float last_high_rsi = na
+var float last_low_rsi = na
+var int bars_since_high = 0
+var int bars_since_low = 0
+
+// Détection des pivots / Pivot detection
+pivot_high = ta.pivothigh(high, 5, 5)
+pivot_low = ta.pivotlow(low, 5, 5)
+rsi_pivot_high = ta.pivothigh(rsi_final, 5, 5)
+rsi_pivot_low = ta.pivotlow(rsi_final, 5, 5)
+
+// Mise à jour des pivots / Pivot updates
+if not na(pivot_high) and not na(rsi_pivot_high)
+    last_high_price := pivot_high
+    last_high_rsi := rsi_pivot_high
+    bars_since_high := 0
+else
+    bars_since_high += 1
+
+if not na(pivot_low) and not na(rsi_pivot_low)
+    last_low_price := pivot_low
+    last_low_rsi := rsi_pivot_low
+    bars_since_low := 0
+else
+    bars_since_low += 1
+
+// Détection divergences haussières / Bullish divergence detection
+bullish_divergence = enable_divergence and not na(last_low_price) and not na(last_low_rsi) and bars_since_low >= 10 and bars_since_low <= 50 and low < last_low_price and rsi_final > last_low_rsi and rsi_final < dynamic_oversold + 10
+
+// Détection divergences baissières / Bearish divergence detection
+bearish_divergence = enable_divergence and not na(last_high_price) and not na(last_high_rsi) and bars_since_high >= 10 and bars_since_high <= 50 and high > last_high_price and rsi_final < last_high_rsi and rsi_final > dynamic_overbought - 10
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GÉNÉRATION DE SIGNAUX / SIGNAL GENERATION
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Signaux de base / Basic signals
+rsi_oversold_signal = rsi_final < dynamic_oversold
+rsi_overbought_signal = rsi_final > dynamic_overbought
+
+// Signaux d'entrée / Entry signals
+long_signal = enable_signals and (ta.crossover(rsi_final, dynamic_oversold) or bullish_divergence)
+short_signal = enable_signals and (ta.crossunder(rsi_final, dynamic_overbought) or bearish_divergence)
+
+// Confirmation des signaux / Signal confirmation
+var int long_confirmation = 0
+var int short_confirmation = 0
+
+if long_signal
+    long_confirmation := signal_confirmation
+else if long_confirmation > 0
+    long_confirmation -= 1
+
+if short_signal
+    short_confirmation := signal_confirmation
+else if short_confirmation > 0
+    short_confirmation -= 1
+
+confirmed_long = long_confirmation > 0
+confirmed_short = short_confirmation > 0
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HISTOGRAMME DE MOMENTUM / MOMENTUM HISTOGRAM
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Calcul moyenne mobile RSI / RSI moving average calculation
+rsi_ma = ta.sma(rsi_final, 21)
+momentum_histogram = rsi_final - rsi_ma
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STATISTIQUES TEMPS RÉEL / REAL-TIME STATISTICS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Variables statistiques / Statistical variables
+var int total_signals = 0
+var int successful_signals = 0
+var float cumulative_return = 0.0
+var float max_drawdown = 0.0
+var float peak_value = 0.0
+
+// Mise à jour statistiques / Statistics update
+if long_signal or short_signal
+    total_signals += 1
+
+// Calcul performance / Performance calculation
+current_return = (close - close[1]) / close[1] * 100
+if confirmed_long and current_return > 0
+    successful_signals += 1
+    cumulative_return += current_return
+else if confirmed_short and current_return < 0
+    successful_signals += 1
+    cumulative_return += math.abs(current_return)
+
+// Calcul drawdown / Drawdown calculation
+if cumulative_return > peak_value
+    peak_value := cumulative_return
+current_drawdown = (peak_value - cumulative_return) / peak_value * 100
+if current_drawdown > max_drawdown
+    max_drawdown := current_drawdown
+
+// Taux de réussite / Success rate
+success_rate = total_signals > 0 ? successful_signals / total_signals * 100 : 0
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AFFICHAGE GRAPHIQUE / GRAPHICAL DISPLAY
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Lignes de zones / Zone lines
+hline(50, "Ligne Médiane", color=color.gray, linestyle=hline.style_dashed)
+plot(dynamic_overbought, "Zone Surachat Dynamique", color=color.red, linewidth=2)
+plot(dynamic_oversold, "Zone Survente Dynamique", color=color.green, linewidth=2)
+
+// Zones de remplissage / Fill zones
+fill_overbought = plot(dynamic_overbought, color=color.new(color.red, 100))
+fill_100 = plot(100, color=color.new(color.red, 100))
+fill(fill_overbought, fill_100, color=color.new(color.red, 85), title="Zone Surachat")
+
+fill_oversold = plot(dynamic_oversold, color=color.new(color.green, 100))
+fill_0 = plot(0, color=color.new(color.green, 100))
+fill(fill_oversold, fill_0, color=color.new(color.green, 85), title="Zone Survente")
+
+// RSI principal / Main RSI
+rsi_color = rsi_final > dynamic_overbought ? color.red : 
+           rsi_final < dynamic_oversold ? color.green : color.blue
+plot(rsi_final, "RSI Dynamique", color=rsi_color, linewidth=3)
+
+// RSI Multi-timeframe / Multi-timeframe RSI
+plot(enable_mtf ? mtf_rsi : na, "RSI Multi-TF", color=color.orange, linewidth=2, display=display.all)
+
+// Histogramme de momentum / Momentum histogram
+histogram_color = momentum_histogram > 0 ? color.new(color.lime, 50) : color.new(color.red, 50)
+plot(show_histogram ? momentum_histogram + 50 : na, "Momentum", color=histogram_color, style=plot.style_histogram, linewidth=1)
+
+// Signaux visuels / Visual signals
+plotshape(confirmed_long, style=shape.triangleup, location=location.bottom, color=color.green, size=size.normal, title="Signal Long")
+plotshape(confirmed_short, style=shape.triangledown, location=location.top, color=color.red, size=size.normal, title="Signal Short")
+
+// Marqueurs de divergence / Divergence markers
+plotshape(bullish_divergence, style=shape.circle, location=location.bottom, color=color.yellow, size=size.small, title="Divergence Haussière")
+plotshape(bearish_divergence, style=shape.circle, location=location.top, color=color.purple, size=size.small, title="Divergence Baissière")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TABLEAU DE BORD / DASHBOARD
+// ═══════════════════════════════════════════════════════════════════════════
+
+if show_dashboard and barstate.islast
+    // Position du tableau / Dashboard position
+    dashboard_x = dashboard_position == "top_right" or dashboard_position == "bottom_right" ? 85 : 5
+    dashboard_y = dashboard_position == "top_left" or dashboard_position == "top_right" ? 90 : 10
+    
+    // Création du tableau / Dashboard creation
+    table_position = dashboard_position == "top_right" ? position.top_right : dashboard_position == "top_left" ? position.top_left : dashboard_position == "bottom_right" ? position.bottom_right : position.bottom_left
+    var table dashboard = table.new(position=table_position, columns=2, rows=8, bgcolor=color.new(color.white, 80), border_width=2, border_color=color.blue)
+    
+    // En-tête / Header
+    table.cell(dashboard, 0, 0, "RSI DYNAMIQUE", text_color=color.white, bgcolor=color.blue, text_size=size.normal)
+    table.cell(dashboard, 1, 0, "VALEURS", text_color=color.white, bgcolor=color.blue, text_size=size.normal)
+    
+    // Données temps réel / Real-time data
+    table.cell(dashboard, 0, 1, "RSI Actuel", text_color=color.black, text_size=size.small)
+    table.cell(dashboard, 1, 1, str.tostring(math.round(rsi_final, 2)), text_color=rsi_color, text_size=size.small)
+    
+    table.cell(dashboard, 0, 2, "Zone Surachat", text_color=color.black, text_size=size.small)
+    table.cell(dashboard, 1, 2, str.tostring(math.round(dynamic_overbought, 1)), text_color=color.red, text_size=size.small)
+    
+    table.cell(dashboard, 0, 3, "Zone Survente", text_color=color.black, text_size=size.small)
+    table.cell(dashboard, 1, 3, str.tostring(math.round(dynamic_oversold, 1)), text_color=color.green, text_size=size.small)
+    
+    table.cell(dashboard, 0, 4, "Volatilité ATR", text_color=color.black, text_size=size.small)
+    table.cell(dashboard, 1, 4, str.tostring(math.round(atr_normalized, 1)) + "%", text_color=color.gray, text_size=size.small)
+    
+    table.cell(dashboard, 0, 5, "Total Signaux", text_color=color.black, text_size=size.small)
+    table.cell(dashboard, 1, 5, str.tostring(total_signals), text_color=color.blue, text_size=size.small)
+    
+    table.cell(dashboard, 0, 6, "Taux Réussite", text_color=color.black, text_size=size.small)
+    table.cell(dashboard, 1, 6, str.tostring(math.round(success_rate, 1)) + "%", text_color=success_rate > 50 ? color.green : color.red, text_size=size.small)
+    
+    table.cell(dashboard, 0, 7, "Drawdown Max", text_color=color.black, text_size=size.small)
+    table.cell(dashboard, 1, 7, str.tostring(math.round(max_drawdown, 1)) + "%", text_color=color.red, text_size=size.small)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ALERTES / ALERTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Alertes de signaux / Signal alerts
+alertcondition(confirmed_long, title="Signal Long RSI Dynamique", message="🟢 SIGNAL LONG: RSI dynamique indique une opportunité d'achat.\nRSI: {{plot(\"RSI Dynamique\")}}\nZone Survente: {{plot(\"Zone Survente Dynamique\")}}")
+
+alertcondition(confirmed_short, title="Signal Short RSI Dynamique", message="🔴 SIGNAL SHORT: RSI dynamique indique une opportunité de vente.\nRSI: {{plot(\"RSI Dynamique\")}}\nZone Surachat: {{plot(\"Zone Surachat Dynamique\")}}")
+
+// Alertes de divergences / Divergence alerts
+alertcondition(bullish_divergence, title="Divergence Haussière", message="📈 DIVERGENCE HAUSSIÈRE détectée: Le prix fait un plus bas tandis que le RSI fait un plus haut.")
+
+alertcondition(bearish_divergence, title="Divergence Baissière", message="📉 DIVERGENCE BAISSIÈRE détectée: Le prix fait un plus haut tandis que le RSI fait un plus bas.")
+
+// Alerte zones extrêmes / Extreme zones alert
+alertcondition(rsi_final > 90 or rsi_final < 10, title="Zone Extrême", message="⚠️ RSI en ZONE EXTRÊME: {{plot(\"RSI Dynamique\")}}")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BACKTEST INTÉGRÉ / INTEGRATED BACKTEST
+// ═══════════════════════════════════════════════════════════════════════════
+
+if enable_backtest
+    // Variables backtest / Backtest variables
+    var float entry_price = na
+    var bool in_position = false
+    var int trade_count = 0
+    var float total_pnl = 0.0
+    var float winning_trades = 0
+    var float losing_trades = 0
+    
+    // Période de backtest / Backtest period
+    in_backtest_period = time >= backtest_start and time <= backtest_end
+    
+    if in_backtest_period
+        // Entrée en position / Position entry
+        if confirmed_long and not in_position
+            entry_price := close
+            in_position := true
+            trade_count += 1
+            
+        // Sortie de position / Position exit
+        if in_position and (confirmed_short or ta.crossover(rsi_final, dynamic_overbought))
+            exit_price = close
+            pnl = (exit_price - entry_price) / entry_price * 100
+            total_pnl += pnl
+            
+            if pnl > 0
+                winning_trades += 1
+            else
+                losing_trades += 1
+                
+            in_position := false
+            entry_price := na
+    
+    // Affichage résultats backtest / Backtest results display
+    if barstate.islast and enable_backtest
+        win_rate = trade_count > 0 ? winning_trades / trade_count * 100 : 0
+        avg_return = trade_count > 0 ? total_pnl / trade_count : 0
+        
+        // Log des résultats / Results logging
+        log.info("BACKTEST RÉSULTATS:\n" + "Trades Total: " + str.tostring(trade_count) + "\n" + "Taux Réussite: " + str.tostring(math.round(win_rate, 2)) + "%\n" + "PnL Total: " + str.tostring(math.round(total_pnl, 2)) + "%\n" + "Rendement Moyen: " + str.tostring(math.round(avg_return, 2)) + "%")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NOTES DE DÉVELOPPEMENT / DEVELOPMENT NOTES
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Version: 1.0.0
+// Auteur: RSI Dynamique Pro
+// Date: 2024
+// 
+// Fonctionnalités implémentées / Implemented features:
+// ✅ RSI avec période personnalisable
+// ✅ Zones dynamiques basées sur la volatilité ATR
+// ✅ Lissage EMA du RSI
+// ✅ Multi-timeframe support
+// ✅ Détection de divergences
+// ✅ Signaux d'entrée/sortie avec confirmation
+// ✅ Histogramme de momentum
+// ✅ Tableau de bord statistiques temps réel
+// ✅ Système d'alertes complet
+// ✅ Backtest intégré
+// ✅ Gestion d'erreurs robuste
+// ✅ Interface utilisateur intuitive
+// ✅ Code commenté français/anglais
+// ✅ Architecture modulaire
+//
+// Performance optimisée pour tous types de marchés
+// Compatible Pine Script v6 - TradingView
