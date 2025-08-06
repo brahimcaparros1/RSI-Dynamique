@@ -1,0 +1,12 @@
+//@version=6
+indicator("RSI Ultra Simple", "RSI-SIMPLE", overlay=false)
+
+// TEST ABSOLUMENT MINIMAL
+rsi_value = ta.rsi(close, 14)
+
+// LIGNES DE BASE
+hline(30, "30", color=color.red)
+hline(70, "70", color=color.red)
+
+// RSI SIMPLE
+plot(rsi_value, "RSI", color=color.blue, linewidth=3)

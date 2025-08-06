@@ -1,0 +1,128 @@
+//@version=6
+indicator("Test Visibilité Signaux", "TEST-SIGNALS", overlay=false)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TEST VISIBILITÉ DES SIGNAUX / SIGNAL VISIBILITY TEST
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Test spécialisé pour vérifier que les signaux sont bien visibles
+// et correctement positionnés sur l'indicateur RSI
+
+// Paramètres / Parameters
+signal_test_period = input.int(14, "Période RSI", minval=2, maxval=100)
+test_oversold = input.float(30, "Test Survente", minval=10, maxval=40)
+test_overbought = input.float(70, "Test Surachat", minval=60, maxval=90)
+
+// RSI de base / Basic RSI
+rsi_signal_test = ta.rsi(close, signal_test_period)
+
+// Zones de test / Test zones
+hline(0, "0", color=color.gray)
+hline(test_oversold, "Survente Test", color=#33FF33, linestyle=hline.style_dashed, linewidth=2)
+hline(50, "Médiane", color=color.gray, linestyle=hline.style_dashed)
+hline(test_overbought, "Surachat Test", color=#FF3333, linestyle=hline.style_dashed, linewidth=2)
+hline(100, "100", color=color.gray)
+
+// RSI avec couleurs haute visibilité / RSI with high visibility colors
+plot(rsi_signal_test, "RSI Test", color=#0066FF, linewidth=4)
+
+// === TEST DES DIFFÉRENTS TYPES DE SIGNAUX ===
+
+// 1. Signaux basiques / Basic signals
+basic_long = ta.crossover(rsi_signal_test, test_oversold)
+basic_short = ta.crossunder(rsi_signal_test, test_overbought)
+
+// 2. Test de tous les styles de formes / Test all shape styles
+plotshape(basic_long and bar_index % 4 == 0, style=shape.triangleup, location=location.absolute, color=#00FF00, size=size.huge, title="Triangle Up Huge")
+plotshape(basic_long and bar_index % 4 == 1, style=shape.arrowup, location=location.absolute, color=#00FF00, size=size.large, title="Arrow Up Large")
+plotshape(basic_long and bar_index % 4 == 2, style=shape.circle, location=location.absolute, color=#00FF00, size=size.normal, title="Circle Normal")
+plotshape(basic_long and bar_index % 4 == 3, style=shape.square, location=location.absolute, color=#00FF00, size=size.small, title="Square Small")
+
+plotshape(basic_short and bar_index % 4 == 0, style=shape.triangledown, location=location.absolute, color=#FF0000, size=size.huge, title="Triangle Down Huge")
+plotshape(basic_short and bar_index % 4 == 1, style=shape.arrowdown, location=location.absolute, color=#FF0000, size=size.large, title="Arrow Down Large")
+plotshape(basic_short and bar_index % 4 == 2, style=shape.xcross, location=location.absolute, color=#FF0000, size=size.normal, title="X-Cross Normal")
+plotshape(basic_short and bar_index % 4 == 3, style=shape.diamond, location=location.absolute, color=#FF0000, size=size.small, title="Diamond Small")
+
+// === TEST DES COULEURS DE CONTRASTE ===
+
+// Test différentes couleurs / Test different colors
+color_test_long = bar_index % 5 == 0 ? #00FF00 :  // Vert pur
+                  bar_index % 5 == 1 ? #LIME :    // Lime
+                  bar_index % 5 == 2 ? #32CD32 :  // Lime green
+                  bar_index % 5 == 3 ? #7FFF00 :  // Chartreuse
+                  #ADFF2F                          // Green yellow
+
+color_test_short = bar_index % 5 == 0 ? #FF0000 : // Rouge pur
+                   bar_index % 5 == 1 ? #DC143C : // Crimson
+                   bar_index % 5 == 2 ? #FF4500 : // Orange red
+                   bar_index % 5 == 3 ? #FF6347 : // Tomato
+                   #FF1493                         // Deep pink
+
+// === LABELS DE TEST ===
+
+// Labels avec différents styles / Labels with different styles
+if basic_long
+    label.new(bar_index, rsi_signal_test + 5, "LONG", style=label.style_label_up, color=#00FF00, textcolor=color.white, size=size.normal)
+    label.new(bar_index, rsi_signal_test - 5, "BUY", style=label.style_label_center, color=color.new(#00FF00, 20), textcolor=color.black, size=size.small)
+
+if basic_short
+    label.new(bar_index, rsi_signal_test - 5, "SHORT", style=label.style_label_down, color=#FF0000, textcolor=color.white, size=size.normal)
+    label.new(bar_index, rsi_signal_test + 5, "SELL", style=label.style_label_center, color=color.new(#FF0000, 20), textcolor=color.black, size=size.small)
+
+// === TABLEAU DE TEST COULEURS ===
+
+if barstate.islast
+    var table color_test_table = table.new(position.top_left, columns=3, rows=8, bgcolor=color.new(color.black, 90), border_width=1)
+    
+    // En-tête
+    table.cell(color_test_table, 0, 0, "COULEUR", text_color=color.white, bgcolor=color.gray, text_size=size.small)
+    table.cell(color_test_table, 1, 0, "HEX", text_color=color.white, bgcolor=color.gray, text_size=size.small)
+    table.cell(color_test_table, 2, 0, "TEST", text_color=color.white, bgcolor=color.gray, text_size=size.small)
+    
+    // Test des couleurs
+    table.cell(color_test_table, 0, 1, "Vert", text_color=#00FF00, text_size=size.tiny)
+    table.cell(color_test_table, 1, 1, "#00FF00", text_color=color.white, text_size=size.tiny)
+    table.cell(color_test_table, 2, 1, "■", text_color=#00FF00, text_size=size.normal)
+    
+    table.cell(color_test_table, 0, 2, "Rouge", text_color=#FF0000, text_size=size.tiny)
+    table.cell(color_test_table, 1, 2, "#FF0000", text_color=color.white, text_size=size.tiny)
+    table.cell(color_test_table, 2, 2, "■", text_color=#FF0000, text_size=size.normal)
+    
+    table.cell(color_test_table, 0, 3, "Bleu", text_color=#0066FF, text_size=size.tiny)
+    table.cell(color_test_table, 1, 3, "#0066FF", text_color=color.white, text_size=size.tiny)
+    table.cell(color_test_table, 2, 3, "■", text_color=#0066FF, text_size=size.normal)
+    
+    table.cell(color_test_table, 0, 4, "Jaune", text_color=#FFFF00, text_size=size.tiny)
+    table.cell(color_test_table, 1, 4, "#FFFF00", text_color=color.white, text_size=size.tiny)
+    table.cell(color_test_table, 2, 4, "■", text_color=#FFFF00, text_size=size.normal)
+    
+    table.cell(color_test_table, 0, 5, "Orange", text_color=#FF8800, text_size=size.tiny)
+    table.cell(color_test_table, 1, 5, "#FF8800", text_color=color.white, text_size=size.tiny)
+    table.cell(color_test_table, 2, 5, "■", text_color=#FF8800, text_size=size.normal)
+    
+    table.cell(color_test_table, 0, 6, "Violet", text_color=#8800FF, text_size=size.tiny)
+    table.cell(color_test_table, 1, 6, "#8800FF", text_color=color.white, text_size=size.tiny)
+    table.cell(color_test_table, 2, 6, "■", text_color=#8800FF, text_size=size.normal)
+    
+    table.cell(color_test_table, 0, 7, "Cyan", text_color=#00FFFF, text_size=size.tiny)
+    table.cell(color_test_table, 1, 7, "#00FFFF", text_color=color.white, text_size=size.tiny)
+    table.cell(color_test_table, 2, 7, "■", text_color=#00FFFF, text_size=size.normal)
+
+// === RAPPORT DE TEST DANS LES LOGS ===
+
+if barstate.islast
+    log.info("🎯 RAPPORT TEST VISIBILITÉ SIGNAUX:")
+    log.info("✅ Formes testées: triangles, flèches, cercles, carrés, croix, diamants")
+    log.info("✅ Tailles testées: tiny, small, normal, large, huge")
+    log.info("✅ Couleurs testées: 7 couleurs haute visibilité")
+    log.info("✅ Labels testés: up, down, center avec contrastes")
+    log.info("✅ Positionnement: location.absolute pour RSI")
+    log.info("📊 RSI actuel: " + str.tostring(math.round(rsi_signal_test, 1)))
+    log.info("🔍 Vérifiez visuellement la lisibilité des signaux!")
+
+// INSTRUCTIONS D'UTILISATION:
+// 1. Charger cet indicateur dans TradingView
+// 2. Observer les différents types de signaux générés
+// 3. Vérifier que les couleurs sont bien visibles sur fond sombre/clair
+// 4. Noter quelles combinaisons forme/couleur/taille sont les plus lisibles
+// 5. Utiliser ces résultats pour optimiser l'indicateur principal

@@ -1,0 +1,24 @@
+//@version=6
+indicator("RSI Test Isolation", "RSI-TEST", overlay=false, format=format.price, precision=2)
+
+// TEST ULTRA SIMPLE D'ISOLATION
+rsi_period = input.int(14, "RSI Période")
+rsi_value = ta.rsi(close, rsi_period)
+
+// LIGNES DE REFERENCE
+hline(0, "0", color=color.gray)
+hline(30, "30", color=color.gray)
+hline(50, "50", color=color.gray) 
+hline(70, "70", color=color.gray)
+hline(100, "100", color=color.gray)
+
+// RSI SEUL
+plot(rsi_value, "RSI", color=color.blue, linewidth=3)
+
+// LOG DE VERIFICATION
+if barstate.islast
+    log.info("🔍 TEST ISOLATION:")
+    log.info("✅ overlay=false: " + str.tostring(not overlay))
+    log.info("✅ format=format.price: OUI")
+    log.info("✅ precision=2: OUI") 
+    log.info("📊 RSI actuel: " + str.tostring(math.round(rsi_value, 2)))

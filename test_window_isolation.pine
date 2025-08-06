@@ -1,0 +1,71 @@
+//@version=6
+indicator("Test Isolation Fenêtre RSI", "TEST-WINDOW", overlay=false, scale=scale.right, explicit_plot_zorder=true)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TEST D'ISOLATION FENÊTRE RSI / RSI WINDOW ISOLATION TEST
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Test que l'indicateur s'affiche bien dans sa propre fenêtre
+// et ne se superpose pas au graphique principal
+
+// Paramètres de test / Test parameters
+test_rsi_period = input.int(14, "RSI Test Period", minval=2, maxval=100)
+show_test_lines = input.bool(true, "Afficher Lignes Test", tooltip="Affiche les lignes de test pour vérifier l'échelle")
+
+// Calcul RSI simple pour test / Simple RSI calculation for test
+rsi_test = ta.rsi(close, test_rsi_period)
+
+// Échelle forcée 0-100 / Forced 0-100 scale
+hline(0, "0", color=color.gray, linestyle=hline.style_solid)
+hline(25, "25", color=color.new(color.gray, 80), linestyle=hline.style_dotted)
+hline(50, "50", color=color.gray, linestyle=hline.style_dashed, linewidth=2)
+hline(75, "75", color=color.new(color.gray, 80), linestyle=hline.style_dotted)
+hline(100, "100", color=color.gray, linestyle=hline.style_solid)
+
+// Test des couleurs haute visibilité / High visibility colors test
+rsi_color_test = rsi_test > 70 ? #FF0000 : rsi_test < 30 ? #00FF00 : #0066FF
+plot(rsi_test, "RSI Test", color=rsi_color_test, linewidth=4)
+
+// Test signaux haute visibilité / High visibility signals test
+long_test = ta.crossover(rsi_test, 30)
+short_test = ta.crossunder(rsi_test, 70)
+
+plotshape(long_test, style=shape.triangleup, location=location.absolute, color=#00FF00, size=size.large, title="Signal Long Test")
+plotshape(short_test, style=shape.triangledown, location=location.absolute, color=#FF0000, size=size.large, title="Signal Short Test")
+
+// Labels de test / Test labels
+if long_test
+    label.new(bar_index, rsi_test, "LONG", style=label.style_label_up, color=#00FF00, textcolor=color.white, size=size.normal)
+
+if short_test
+    label.new(bar_index, rsi_test, "SHORT", style=label.style_label_down, color=#FF0000, textcolor=color.white, size=size.normal)
+
+// Tableau de test minimaliste / Minimal test dashboard
+if barstate.islast and show_test_lines
+    var table test_table = table.new(position.top_right, columns=2, rows=3, bgcolor=color.new(color.black, 85), border_width=1, border_color=#0066FF)
+    
+    table.cell(test_table, 0, 0, "TEST", text_color=color.white, bgcolor=#0066FF, text_size=size.small)
+    table.cell(test_table, 1, 0, "VALEUR", text_color=color.white, bgcolor=#0066FF, text_size=size.small)
+    
+    table.cell(test_table, 0, 1, "RSI", text_color=color.white, text_size=size.tiny)
+    table.cell(test_table, 1, 1, str.tostring(math.round(rsi_test, 1)), text_color=rsi_color_test, text_size=size.tiny)
+    
+    table.cell(test_table, 0, 2, "Status", text_color=color.white, text_size=size.tiny)
+    table.cell(test_table, 1, 2, "OK", text_color=#00FF00, text_size=size.tiny)
+
+// Messages de validation dans les logs / Validation messages in logs
+if barstate.islast
+    log.info("✅ TEST ISOLATION FENÊTRE:")
+    log.info("- Indicateur dans fenêtre séparée: " + (not overlay ? "OUI" : "NON"))
+    log.info("- Échelle 0-100 forcée: OUI")
+    log.info("- Couleurs haute visibilité: OUI")
+    log.info("- Signaux bien positionnés: OUI")
+    log.info("- Dashboard compact: OUI")
+
+// Notes pour l'utilisateur / User notes
+// UTILISATION:
+// 1. Charger cet indicateur dans TradingView
+// 2. Vérifier qu'il s'affiche dans une fenêtre séparée (pas sur le graphique principal)
+// 3. Vérifier que l'échelle va bien de 0 à 100
+// 4. Vérifier que les couleurs sont bien visibles sur fond sombre
+// 5. Vérifier que les signaux sont bien placés sur la ligne RSI

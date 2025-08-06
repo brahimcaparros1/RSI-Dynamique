@@ -21,9 +21,8 @@ rsi = ta.rsi(close, rsi_period)
 
 // ATR normalisé pour zones dynamiques
 atr = ta.atr(atr_period)
-atr_sma = ta.sma(atr, atr_period)
-atr_normalized = (atr / atr_sma - 1) * 100
-volatility_adjustment = atr_normalized * volatility
+atr_percent = atr / close * 100
+volatility_adjustment = atr_percent * volatility * 0.2
 
 // Zones dynamiques avec limitations
 upper_zone = math.min(base_upper + volatility_adjustment, 95)
@@ -63,7 +62,9 @@ bgcolor(short_signal ? color.new(#FF0000, 90) : na, title="Signal Short")
 // ═══════════════════════════════════════════════════════════════════════════
 
 if barstate.islast
-    var table info = table.new(position.top_right, columns=2, rows=4, bgcolor=color.new(color.black, 90), border_width=1, border_color=#0066FF)
+    var table info = table.new(position.top_right, columns=2, rows=4, 
+                                bgcolor=color.new(color.black, 90), 
+                                border_width=1, border_color=#0066FF)
     
     table.cell(info, 0, 0, "RSI", text_color=color.white, bgcolor=#0066FF, text_size=size.tiny)
     table.cell(info, 1, 0, str.tostring(math.round(rsi, 1)), text_color=#0066FF, text_size=size.tiny)
@@ -75,7 +76,7 @@ if barstate.islast
     table.cell(info, 1, 2, str.tostring(math.round(lower_zone, 0)), text_color=#33FF33, text_size=size.tiny)
     
     table.cell(info, 0, 3, "Volatilité", text_color=color.white, text_size=size.tiny)
-    table.cell(info, 1, 3, str.tostring(math.round(atr_normalized, 1)) + "%", text_color=color.yellow, text_size=size.tiny)
+    table.cell(info, 1, 3, str.tostring(math.round(atr_percent, 1)) + "%", text_color=color.yellow, text_size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ALERTES SIMPLES / SIMPLE ALERTS
@@ -90,8 +91,8 @@ alertcondition(short_signal, title="RSI Short", message="🔴 RSI Short - Surach
 
 if barstate.islast
     log.info("🔍 RSI DYNAMIQUE CLEAN - STATUS:")
-    log.info("✅ Isolation fenêtre: OUI")
-    log.info("✅ Format prix: OUI") 
+    log.info("✅ Isolation fenêtre: " + str.tostring(not overlay))
+    log.info("✅ Format prix: " + str.tostring(format == format.price))
     log.info("✅ Précision: 2")
     log.info("📊 RSI: " + str.tostring(math.round(rsi, 2)))
     log.info("📈 Zones: " + str.tostring(math.round(lower_zone, 0)) + " - " + str.tostring(math.round(upper_zone, 0)))
